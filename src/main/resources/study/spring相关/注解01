@@ -1,0 +1,186 @@
+
+======
+获取bean的实例：
+通过applicationContext，及其子类
+
+  1.例如：
+    //@SpringBootApplication这个注解包含的ComponentScan
+   ConfigurableApplicationContext run = SpringApplication.run(SpringStudyDemoApplication.class, args);
+   TestService bean1 = run.getBean(TestService.class);
+   bean1.test();
+
+
+   2.//获取注解configuration配置的bean(传入这个配置bean的配置类)
+   ApplicationContext context = new AnnotationConfigApplicationContext(MyPersonBean.class);
+   Person bean = context.getBean(Person.class);
+
+
+====
+1.扫描注解的使用，指定不需要加载的bean，注意excludeFilters要生效的话，必须使用 useDefaultFilters = false
+因为 useDefaultFilters默认是true的
+2.ComponentScan是个重复注解，可以重复写（注意必须是java8，非java8使用ComponentScans这个注解，
+里面指定多个ComponentScan的规则）
+3.FilterType.ANNOTATION：按照注解来指定，还有其他按照类型等方式，正则，自定义规则（实现TypeFilter接口）
+
+
+@ComponentScan(value = "com.example.springStudyDemo", excludeFilters = {
+        @ComponentScan.Filter(type = FilterType.ANNOTATION,
+                classes = {RestController.class, Service.class})
+}, useDefaultFilters = false)
+
+========
+条件注册bean
+   @Conditional({conditional}),按照一定的条件判断，满足条件给容器注册bean
+   中间的条件时数组，可以使用{}
+   此注解可以放在方法上 ElementType.METHOD ，也可以放在类上 ElementType.TYPE
+ @Conditional({MyCondition.class})
+MyCondition是自定义的条件，需要implements Condition
+其中的方法    public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata)
+        ConditionContext:判断条件能使用的上下文
+        AnnotatedTypeMetadata：注释信息
+
+  ConditionContext这里类可以获取很多信息
+       //获取ioc使用的beanfactory
+       //获取类加载器
+       //获取当前环境信息
+       //获取到bean定义的注册类 BeanDefinitionRegistry注册bean，移除bean等操作
+       //可以使用容器中是否包含某个bean
+  通过这些获取到的信息来进行自定义的条件
+
+=============
+
+ 给容器中注册组件的方式：
+        1.包扫描+注解@Controller，@Service等
+        2.@Bean
+        3.@Import({})，可以快速导入组件，名称默认为全类名
+            1.import直接导入    自动注入，id为全类名
+            2.使用importSelector自定义  返回需要导入的组件名数组（springboot中用的多）
+            3.使用ImportBeanDefinitionRegistrar自定义  手动注入bean到容器中
+        4.使用spring提供的FactoryBean（工厂bean）
+            默认获取到的是factorybean调用getObject方法获得的对象（bean的默认名称为getFactoryBean 方法名）
+            要想获取factorybean本身，需要在id（bean的名字）前面加上& &getFactoryBean
+
+=======
+ bean的生命周期：创建--初始化--销毁
+        容器管理bean的生命周期
+            我们可以自定义初始化方法和销毁方法，容器在bean的当前周期调用我们自定义的初始化和销毁方法
+
+         构造器:(对象创建的时候调用)
+            单实例：容器启动的时候创建
+            多实例：调用的时候才创建
+
+         初始化：对象创建完成，并且赋值好，调用初始化方法
+         销毁：(@Scope("prototype") 此为多实例的情况)
+            单实例：容器关闭的时候
+            多实例：容器不会管理这个bean，所以容器关闭的时候，不会销毁bean，需要调用者手动调用销毁
+
+         1.指定初始化和销毁方法
+            通过bean的initMethod和destroyMethod属性来指定
+         2.通过让bean实现InitializingBean(定义初始化逻辑)
+            DisposableBean(定义销毁逻辑)
+         3.使用JSR250：
+            @PostConstruct：在bean创建完成，并且属性赋值完成，来执行初始化方法
+            @PreDestroy：在容器销毁bean之前通知我们进行清理工作
+         4.BeanPostProcessor:bean的后置处理器（是一个接口）
+            在bean初始化的前后完成一些处理工作
+            postProcessBeforeInitialization：在初始化之前工作
+            postProcessAfterInitialization：在初始化之后工作
+
+         spring底层对BeanPostProcessor的使用
+            bean赋值，注入其他组件，@Autowired，生命周期注解，@Async，xxxBeanPostProcessor实现的
+
+====================================
+springboot bean 的生命周期
+bean的生命周期，这里是主要的一些，完整的可以在去查资料
+  实现了：三个aware接口 BeanNameAware, BeanFactoryAware, ApplicationContextAware,设置bean名称,工厂,上下文
+          两个bean的接口 InitializingBean, DisposableBean,初始化和销毁
+          后置处理器BeanPostProcessor   初始化方法的前后调用后置处理器
+    在Spring中，对象的实例化是通过反射实现的，而对象的属性则是在对象实例化之后通过一定的方式设置的(先实例化,在初始化)
+
+bean启动，BeanConfig类  new出一个实例,实例化
+设置bean的属性
+BeanNameAware接口  @bean注解中name属性，设置bean的名称
+BeanFactoryAware接口，调用setBeanFactory()方法，将BeanFactory容器实例传入
+ApplicationContextAware接口 setApplicationContext()方法，将bean所在应用上下文引用传入进来
+BeanPostProcessor接口(后置处理器)，调用postProcessBeforeInitialization()方法。
+@PostConstruct 注解，(构造函数之后，init()方法之前执行)
+InitializingBean接口，调用他们的afterPropertiesSet()方法
+initMethod指定的方法，自定义初始化方法
+BeanPostProcessor接口(后置处理器)，调用postProcessAfterInitialization()方法
+@PreDestory 注解（destory方法之前执行）
+DisposableBean接口，调用destory()接口方法
+destroyMethod指定的方法，自定义的销毁方法
+
+https://www.cnblogs.com/javazhiyin/p/10905294.html  参考链接
+如上图所示，Bean 的生命周期还是比较复杂的，下面来对上图每一个步骤做文字描述:
+
+Spring启动，查找并加载需要被Spring管理的bean，进行Bean的实例化
+Bean实例化后对将Bean的引入和值注入到Bean的属性中
+如果Bean实现了BeanNameAware接口的话，Spring将Bean的Id传递给setBeanName()方法
+如果Bean实现了BeanFactoryAware接口的话，Spring将调用setBeanFactory()方法，将BeanFactory容器实例传入
+如果Bean实现了ApplicationContextAware接口的话，Spring将调用Bean的setApplicationContext()方法，将bean
+            所在应用上下文引用传入进来。
+如果Bean实现了BeanPostProcessor接口，Spring就将调用他们的postProcessBeforeInitialization()方法。
+    @PostConstruct 注解，(构造函数之后，init()方法之前执行)
+如果Bean 实现了InitializingBean接口，Spring将调用他们的afterPropertiesSet()方法。
+类似的，如果bean使用init-method声明了初始化方法，该方法也会被调用。
+如果Bean 实现了BeanPostProcessor接口，Spring就将调用他们的postProcessAfterInitialization()方法。
+此时，Bean已经准备就绪，可以被应用程序使用了。他们将一直驻留在应用上下文中，直到应用上下文被销毁
+    @PreDestory 注解（destory方法之前执行）
+如果bean实现了DisposableBean接口，Spring将调用它的destory()接口方法，
+同样，如果bean使用了destory-method 声明销毁方法，该方法也会被调用。
+
+=====
+
+使用@Value赋值
+1.基本数值@Value("gg")
+2.可以写SpEL：#{}  可以进行数字的运算  #{20-10}
+3.可以写${},取出配置文件中的值
+
+使用@PropertySource读取外部配置文件中的K/V，保存到运行的环境变量中；加载完外部的配置文件以后，使用${}取出
+（单独写一个配置文件，例如，person.properties文件，里面写person.name=zhangsan）
+@Value("${person.name}}"),且在@Configuration上加上@PropertySource(value={"classpath:/person.properties"})
+======
+
+自动装配：
+    spring，利用依赖注入（DI），完成IOC容器中各个组件的依赖关系
+
+     @Qualifier
+     @Autowired
+     BookDao bookDao;
+
+    1.@Autowired自动注入
+        1.默认优先按照类型去容器中找对应的组件，找到就赋值  applicationContext.getBean(BookDao.class);
+        2.如果找到多个相同类型的组件，则再讲属性的名称作为组件的id去容器中查找
+            applicationContext.getBean("bookDao");
+        3.@Qualifier("bookDao") @Qualifier指定装配组件的id，而不是使用属性名
+        4.自动装配默认一定要将属性装配好，没有就会报错，可以使用@Autowired(required=false)变为非必须
+        5.@Primary：让spring装配的时候，默认使用首选的bean，将其写在需要被装配的bean上
+
+    2.Spring还支持使用@Resource(JSR250)和@Inject(JSR330) java规范
+        @Resource
+            可以和@Autowired一样实现自动装配，默认是按照组件的名称装配的
+            但是没有支持@Prmary和@Autowired(required=false)的功能
+        @Inject
+            需要导入javax.inject包，和@Autowired功能一样，没有required=false的属性
+    区别：@Autowired：是spring定义的， @Resource和@Inject是java的规范
+
+    3.@Autowired：可以在构造器，参数，方法，属性的位置上标注，需要的组件都是从容器中获取的
+         1.标注在方法上时：
+         2.标注在构造器上：如果组件只有一个有参构造器，这个有参构造器的@Autowired可以省略
+         3.放在参数位置：
+
+    4.自定义的组件，要想使用spring容器底层的组件（ApplicationContext，BeanFactory，xxx）
+        只需要自定义的租金实现xxxAware接口；在创建对象的时候，会调用接口规定的方法注入相关组件；
+        把spring底层的组件注入到自定义的bean中（bean后置处理器将其set）
+        xxxAware:功能使用xxxProcessor；
+            ApplicationContextAware=》ApplicationContextAwareProcessor
+
+    5.Profile：spring提供的可以根据当前环境，动态的切换和激活一些列组件的功能
+                开发环境，测试环境，生产环境
+                @Profile 指定组件在哪个环境情况下才能被注册到容器中，不指定，任何环境下都能注册这个组件
+                @Profile("dev")表示在dev环境下注册这个组件
+                1.加了环境表示的bean，只有当前环境被激活的时候，才能注册到容器中，默认是default环境
+                    可以使用applicationContext来设置启动环境
+                2.@Profile("dev")可以写在类上
+                3.没有标注@Profile的bean在任何环境都会加载
